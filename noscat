@@ -15,6 +15,9 @@ monitored_files = {}
 
 def get_mtime(filepath):
     try:
+        mtime = os.path.getmtime(filepath)
+        if mtime:
+            return mtime
         stat = os.stat(filepath)
         if stat:
             mtime = stat.st_mtime
@@ -22,12 +25,15 @@ def get_mtime(filepath):
             mtime = 0
     except (OSError, IOError):
         logging.warn('Give up %s' % filepath)
+        mtime = 0
     return mtime
 
 def is_modified(files):
 
     for file in files:
         mtime = get_mtime(file)
+        if mtime == 0:
+            return False
 
         if file not in monitored_files:
             monitored_files[file] = mtime
@@ -62,7 +68,7 @@ def scan_dir(path):
             allfiles.append(os.path.join(path, f))
     return allfiles
 
-def gather_files(path):
+def _gather_files(path):
     files = []
     if not os.path.exists(path):
         return files
@@ -74,6 +80,13 @@ def gather_files(path):
     filtered_files = [f for f in files if not match_ignored(f)]
     return filtered_files
 
+def gather_files(paths):
+    files = []
+    for target in paths:
+        got_files = _gather_files(target)
+        files += got_files
+    return files
+
 def main():
     """Usage:
     noscat 'nosetests -w app/tests/lib' app/lib/
@@ -83,26 +96,21 @@ def main():
         return
 
     cmd = sys.argv[1]
-    files = []
-    for i in range(2, len(sys.argv)):
-        target = sys.argv[i]
-        got_files = gather_files(target)
-        files += got_files
+    files = gather_files(sys.argv[2:])
 
     for file in files:
         monitored_files[file] = get_mtime(file)
     callback_commands = []
     callback_commands.append(sys.argv[1])
-    argstr = ''
-    for i in range(2, len(sys.argv)):
-        argstr += '%s' % sys.argv[i]
-    print "Looking at %s now. meowww~" % argstr
+    print "Looking at\n%s\nnow (~%d files). meowww~" % ("\n".join(sys.argv[2:]), len(files))
 
     run_commands(callback_commands)
     while 1:
+        #if is_modified(monitored_files):
+        #input_data = raw_input()
         if is_modified(monitored_files):
             run_commands(callback_commands)
-        time.sleep(3)
+            time.sleep(3)
 
 if __name__ == '__main__':
     try:
